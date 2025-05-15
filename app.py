@@ -32,7 +32,5 @@ async def before_serving():
 register_routes(app)
 
 
-
-
 if __name__ == "__main__":
     app.run()
