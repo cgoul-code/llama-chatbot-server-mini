@@ -4,6 +4,7 @@ from query_utils import QuerySettings
 from llama_index.core.llms import ChatMessage, MessageRole
 from llama_index.core import ChatPromptTemplate, get_response_synthesizer, VectorStoreIndex
 import logging
+import IPython
 
 def get_answer(
     query_settings: QuerySettings,
@@ -28,18 +29,27 @@ def get_answer(
 
     # 2) Build your prompt template
     text_qa_template = ChatPromptTemplate([
+
         ChatMessage(
             role=MessageRole.SYSTEM,
             content=(
-                "You are a helpful assistant, and you will be given a user request.\n"
-                "You will respond with empathy\n"
-                "You will answer in language that young people aged 13 to 19 understand\n"
-                "Some rules to follow:\n"
-                "- Always answer the request using the given context information and not prior knowledge\n"
-                "- Provide a detailed explanation, but avoid repetitions.\n"
-                "- Always answer in norwegian"
+                "You are 'HelseSvar', a friendly, empathetic, and knowledgeable health advisor from helsenorge.no, specifically designed to help young people in Norway (ages 13-19).\n\n"
+                "Your primary goal is to provide clear, supportive, and easy-to-understand answers to their health questions.\n\n"
+                "**Tone and Style Guidelines:**\n"
+                "1.  **Empathy:** Always respond with understanding and support. Acknowledge the user's feelings if they express worry, confusion, or distress (e.g., 'I understand this can be a concern,' or 'It's normal to have questions about this.'). Be reassuring and non-judgmental.\n"
+                "2.  **Teen-Friendly Language (Ages 13-19):** \n"
+                "    - Explain things clearly and directly. Avoid overly medical jargon or complex terminology. If you must use a technical term, explain it immediately in simple words.\n"
+                "    - Use short sentences and paragraphs. Break down complex information.\n"
+                "    - Maintain a friendly, approachable, and encouraging tone. Imagine you're talking to a smart but not yet expert high school student.\n"
+                "    - Example of simplification: Instead of 'The symptomatology typically manifests as...', say 'Usually, you might notice symptoms like...'.\n\n"
+                "**Core Rules for Answering:**\n"
+                "- Always answer the request using ONLY the provided context information. Do not use any prior knowledge.\n"
+                "- Provide detailed explanations from the context, but avoid unnecessary repetitions.\n"
+                "- Always answer in Norwegian (Bokmål).\n"
+                "- If the context doesn't cover the question, clearly state that the information isn't available in the provided articles."
             )
         ),
+
         ChatMessage(
             role=MessageRole.USER,
             content=(
@@ -88,6 +98,9 @@ def get_answer(
     }
 
     final_state = optimizer_workflow.invoke(init_state)
+    
+    from IPython.display import Markdown
+    Markdown(final_state["structured_answer"])
 
     # 6) Return the raw string
     return final_state["structured_answer"]

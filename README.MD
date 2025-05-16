@@ -97,7 +97,8 @@ pip install:
     llama_index.llms.azure_openai
     llama_index.embeddings.azure_openai
     langchain_openai
-    langgraph
+    langgraphy
+    ipython (to visualize the workflow)
 
 ## Create your file structure
 # Inside your project folder:
@@ -113,6 +114,9 @@ pip install:
 
 
 /blobstorage/chatbot/helsenorgeartikler
+
+## agent_workflow_structured_answer
+![workflow](./agent_workflow_structured_answer.png)
 
 
 # etc.

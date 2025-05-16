@@ -25,5 +25,5 @@ def register_routes(app):
         
         except Exception as e:
             logging.error("Error in /chat handler", exc_info=True)
-            # ce.args[0] is your message, ce.code is the HTTP status
-            return {"error": str(e)}, e.status_code  
+            status = getattr(e, "code", 500)          # default to 500 if no .code
+            return {"error": str(e)}, status

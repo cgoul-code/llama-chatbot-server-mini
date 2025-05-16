@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from langchain_openai import AzureChatOpenAI
 from llama_index.core import (StorageContext, load_index_from_storage)
 from collections import namedtuple
+import asyncio
 
 # define the namedtuple at module scope
 IndexObject = namedtuple('IndexObject', ['name', 'index', 'description'])
@@ -22,9 +23,9 @@ def RunningLocally():
 
 # Class definitions
 class CustomError(Exception):
-    def __init__(self, message, status_code):
+    def __init__(self, message, code):
         super().__init__(message)
-        self.status_code = status_code
+        self.code = code
 
 class ServerSettings:
     def __init__(self):
@@ -134,8 +135,12 @@ async def async_read_indexes():
     try:
         # clear any previous run
         vector_store.clear()
+        
+        # offload the sync work
+        found_any = await asyncio.to_thread(read_all_indexes_from_storage, VECTOR_INDEX_MAP)
 
-        if read_all_indexes_from_storage(VECTOR_INDEX_MAP):
+
+        if found_any:
             logging.info("Indexes successfully read from storage.")
             server_settings.update_status("Server is ready")
         else:

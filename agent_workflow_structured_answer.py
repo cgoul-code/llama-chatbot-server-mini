@@ -95,7 +95,7 @@ def calculate_readability_index(state: State) -> None:
 
 def readability_evaluator(state: State) -> dict:
     calculate_readability_index(state)
-    if state["lix_score"] > 35:
+    if state["lix_score"] > 50:
         return {
             "readable_or_not": "not readable",
             "feedback": "Make this text more readable by using shorter sentences, fewer words, and simpler language."
@@ -144,7 +144,7 @@ def aggregator(state: State) -> dict:
         feedback = state["feedback"] 
         return {"structured_answer": feedback}
     else:
-        combined = f"# Oppsummering av svaret\n\n"
+        combined = f"# Oppsummering av spørsmålet\n\n"
         combined += f"## Spørsmålet fra brukeren\n{state['query']}\n\n"
         combined += f"## Tittel\n{state['query_short_version']}\n\n"
         combined += f"## Kort sammendrag av spørsmålet\n{state['query_summary']}\n\n"
@@ -159,53 +159,61 @@ def aggregator(state: State) -> dict:
 # === Build static, stateless workflow ===
 builder = StateGraph(State)
 
-builder.add_node("llm_call_short_version_generator", llm_call_short_version_generator)
-builder.add_node("llm_call_summary_generator", llm_call_summary_generator)
+# 1️⃣ Core answer + validation
 builder.add_node("llm_call_answer", llm_call_answer)
-builder.add_node("readability_evaluator", readability_evaluator)
-builder.add_node("llm_make_answer_more_readable", llm_make_answer_more_readable)
-builder.add_node("response_builder_node", response_builder_node)
-builder.add_node("references_generator", references_generator)
-builder.add_node("aggregator", aggregator)
-builder.add_node("on_reject_build_structured", on_reject_build_structured)
 builder.add_node("validate_response", validate_response)
-
 builder.add_edge(START, "llm_call_answer")
 builder.add_edge("llm_call_answer", "validate_response")
 
-builder.add_edge("response_builder_node", "readability_evaluator")
-builder.add_edge("response_builder_node", "llm_call_short_version_generator")
-builder.add_edge("response_builder_node", "llm_call_summary_generator")
-builder.add_edge("response_builder_node", "references_generator")
+# 2️⃣ Branch on validation result:
+#    - "Rejected" → aggregator
+#    - "Accepted" → fan-out into 4 nodes
+builder.add_node("aggregator", aggregator)
+builder.add_node("llm_call_short_version_generator", llm_call_short_version_generator)
+builder.add_node("llm_call_summary_generator", llm_call_summary_generator)
+builder.add_node("references_generator", references_generator)
+builder.add_node("readability_evaluator", readability_evaluator)
 
-builder.add_edge("llm_make_answer_more_readable", "readability_evaluator")
+builder.add_conditional_edges(
+    "validate_response",
+    # router: return exactly the keys below
+    lambda s: "Rejected" if s["validate_response_result"] == "Rejected"
+              else "Accepted",
+    {
+        "Rejected": "aggregator",
+        "Accepted": "llm_call_short_version_generator",
+    }
+)
+
+# 3️⃣ Fan-out the Accepted branch into the other 3 nodes
+#    (these edges will only fire when validate_response_result == "Accepted")
+builder.add_edge("validate_response", "llm_call_summary_generator")
+builder.add_edge("validate_response", "references_generator")
+builder.add_edge("validate_response", "readability_evaluator")
 
 builder.add_edge("llm_call_short_version_generator", "aggregator")
 builder.add_edge("llm_call_summary_generator", "aggregator")
 builder.add_edge("references_generator", "aggregator")
-builder.add_edge("aggregator", END)
-builder.add_edge("validate_response", END)
 
-builder.add_conditional_edges(
-    "validate_response",
-        lambda s:                                       # 2️⃣ A “router” function, which…
-        "accepted" if s["validate_response_result"] == "Accepted"
-        else "rejected",
-        {
-        "accepted": "response_builder_node",                  
-        "rejected": "aggregator"     
-        })
-
+# 4️⃣ Readability loop
+builder.add_node("llm_make_answer_more_readable", llm_make_answer_more_readable)
 builder.add_conditional_edges(
     "readability_evaluator",
-    route_answer,
-    {  # Name returned by route_answer : Name of next node to visit
-        "Accepted": "aggregator",
-        "Rejected + Feedback": "llm_make_answer_more_readable",
-    },
+    lambda s: "ok" if s["readable_or_not"] == "readable" else "revise",
+    {
+        "ok":     "aggregator",
+        "revise": "llm_make_answer_more_readable",
+    }
 )
+builder.add_edge("llm_make_answer_more_readable", "readability_evaluator")
 
-# Compile the workflow
+# 5️⃣ Finally, aggregator → END
+builder.add_edge("aggregator", END)
+
 optimizer_workflow = builder.compile()
+
+# produce graph.mmd that visualizes the workflow
+#from graph_utils import save_mermaid_diagram
+#save_mermaid_diagram(optimizer_workflow.get_graph())
 
 logging.info("optimizer_workflow created...")
